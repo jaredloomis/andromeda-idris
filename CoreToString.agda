@@ -1,12 +1,13 @@
 {-# OPTIONS --no-termination-check #-}
 module CoreToString where
 
+open import Function
+
 open import Data.String
 open import Data.List as L hiding (_++_)
 open import Data.Float renaming (show to showFlt)
 open import Data.Integer renaming (show to showℤ)
 open import Data.Nat.Show renaming (show to showℕ)
-open import Data.Fin using (toℕ)
 open import Data.Bool.Show renaming (show to showBool)
 open import Data.Maybe
 open import Data.Product
@@ -18,11 +19,21 @@ open import Core
 ----------
 
 intercalate : String → List String → String
-intercalate sep (x₁ ∷ xs) = foldr (λ x accum → accum ++ sep ++ x) x₁ xs
+intercalate sep (x₁ ∷ xs) = foldl (λ accum x → accum ++ sep ++ x) x₁ xs
 intercalate _   _         = ""
 
+test = intercalate ", " ("wasabi" ∷ "onions" ∷ "tomato" ∷ [])
+
 concatStr : List String → String
-concatStr = foldr (λ a b → b ++ a) ""
+concatStr = foldr _++_ ""
+
+pad : String -> String
+pad ""  = ""
+pad str = str ++ " "
+
+infixr 5 _<++>_
+_<++>_ : String -> String -> String
+a <++> b = pad a ++ b
 
 ----------
 -- Type --
@@ -37,7 +48,7 @@ showScalar CBool   = "bool"
 showScalar CVoid   = "void"
 
 scalarPrefix : CScalar → String
-scalarPrefix CFloat  = "f"
+scalarPrefix CFloat  = ""
 scalarPrefix CDouble = "d"
 scalarPrefix CInt    = "i"
 scalarPrefix CUInt   = "u"
@@ -49,13 +60,13 @@ showType : CType → String
 showType (CScalarTy sc) = showScalar sc
 showType (ty CVec⟦ n ⟧) =
     scalarPrefix ty ++ "vec" ++
-    showℕ (toℕ n)
+    showℕ n
 showType (ty CMat⟦ n ⟧⟦ m ⟧) =
     scalarPrefix ty ++ "mat" ++
-    showℕ (toℕ n) ++ "x" ++ showℕ (toℕ m)
+    showℕ n ++ "x" ++ showℕ m
 showType (ty CArray⟦ n ⟧) =
     showType ty ++ "[" ++ showℕ n ++ "]"
-showType (CSampler n) = "sampler" ++ showℕ (toℕ n) ++ "D"
+showType (CSampler n) = "sampler" ++ showℕ n ++ "D"
 showType CSamplerCube = "samplerCube"
 showType (CProduct tyA tyB) = "Pair" -- TODO
 
@@ -124,8 +135,8 @@ showInterpolationQualifier Smooth           = "smooth"
 
 showQualifier : Qualifier → String
 showQualifier (MkQualifier layout storage interpolation) =
-    maybe′ showLayoutQualifier        "" layout  ++ " " ++
-    maybe′ showStorageQualifier       "" storage ++ " " ++
+    maybe′ showLayoutQualifier        "" layout  <++>
+    maybe′ showStorageQualifier       "" storage <++>
     maybe′ showInterpolationQualifier "" interpolation
 
 -------------
@@ -134,7 +145,7 @@ showQualifier (MkQualifier layout storage interpolation) =
 
 showFullVar : FullVar → String
 showFullVar ((ty , qual) , name) =
-    showQualifier qual ++ " " ++ showType ty ++ " " ++ name
+    showQualifier qual <++> showType ty <++> name
 
 ---------------
 -- Statement --
@@ -144,10 +155,10 @@ showStatement : CStatement → String
 showStatement (DoExpr expr)      = showExpr expr ++ ";\n"
 showStatement (SequenceStmt a b) = showStatement a ++ showStatement b
 showStatement (DefineStmt (CDefine ty name expr)) =
-    showType ty ++ " " ++ name ++ " = " ++
+    showType ty <++> name <++> "=" <++>
     showExpr expr ++ ";\n"
 showStatement (Assign to from) =
-    to ++ " = " ++ showExpr from ++ ";\n"
+    to <++> "=" <++> showExpr from ++ ";\n"
 showStatement (If b t nothing) =
     "if(" ++ showExpr b ++ ") {\n" ++
         showStatement t ++
@@ -164,7 +175,7 @@ showStatement (DoWhile x x₁)    = "/* USED DOWHILE. TODO */"
 showStatement (For x x₁ x₂ x₃)  = "/* USED FOR. TODO */"
 showStatement Continue          = "continue;"
 showStatement Break             = "break;"
-showStatement (Return (just x)) = "return " ++ showExpr x ++ ";\n"
+showStatement (Return (just x)) = "return" <++> showExpr x ++ ";\n"
 showStatement (Return nothing)  = "return;\n"
 showStatement Discard           = "discard;\n"
 
@@ -182,13 +193,13 @@ showProfile Es            = "es"
 --------------
 
 showTopLevel : CTopLevel → String
-showTopLevel (DeclVar fVar) = showFullVar fVar
+showTopLevel (DeclVar fVar) = showFullVar fVar ++ ";\n"
 showTopLevel (DeclFun ty name params body) =
-    showType ty ++ " " ++ name ++ "(" ++
+    showType ty <++> name ++ "(" ++
     intercalate ", " (L.map showFullVar params) ++ ") {\n" ++
     showStatement body ++
     "}"
 showTopLevel (Version n profile) =
-    "#version " ++ showℕ n ++ " " ++
+    "#version" <++> showℕ n <++>
     maybe′ showProfile "" profile
 showTopLevel (RawTopLevel str) = str

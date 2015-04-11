@@ -7,7 +7,6 @@ open import Data.Unit
 open import Data.Bool
 open import Data.Nat hiding (_⊔_)
 open import Data.Integer hiding (_⊔_)
-open import Data.Fin
 open import Data.Float
 open import Data.Char
 
@@ -22,10 +21,10 @@ open import Core
 -- Types --
 -----------
 
-Mat : Fin 4 → Fin 4 → Set → Set
-Mat n m A = Vec (Vec A (toℕ m)) (toℕ n)
+Mat : Set → ℕ → ℕ → Set
+Mat A n m = Vec (Vec A m) n
 
-data Sampler : Fin 3 → Set where
+data Sampler : ℕ → Set where
 
 data SamplerCube : Set where
 
@@ -45,13 +44,13 @@ mutual
   data Type : Set → Set where
       scalar : {A : Set} → Scalar A → Type A
 
-      sampler     : (n : Fin 3) → Type (Sampler n)
+      sampler     : (n : ℕ) → Type (Sampler n)
       samplerCube : Type SamplerCube
 
       _vec⟦_⟧    : {A : Set} →
-          Scalar A → (n : Fin 4) → Type (Vec A (toℕ n))
+          Scalar A → (n : ℕ) → Type (Vec A n)
       _mat⟦_⟧⟦_⟧ : {A : Set} →
-          Scalar A → (n : Fin 4) → (m : Fin 4) → Type (Mat n m A)
+          Scalar A → (n : ℕ) → (m : ℕ) → Type (Mat A n m)
       _array⟦_⟧  : {A : Set} →
           Type A → {- Expr ℕ -} ℕ → Type (List A)
 
@@ -59,6 +58,9 @@ mutual
           Type A → Type B → Type (A × B)
       _~>_ : {A B : Set} →
           Type A → Type B → Type (A → B)
+
+      -- Unneeded/Unused/Erased type
+      □  : {A : Set} → Type A
 
 ----------
 -- Expr --
@@ -80,16 +82,13 @@ mutual
       PostUnOp : {A B   : Set} → Name → Lit (A → B)
       BinOp    : {A B C : Set} → Name → Lit (A → B → C)
 
-{-
-      FieldSelection
-               : {A : Set} → Name → Lit A
--}
-
       Pair     : {A B : Set} → Lit (A → B → A × B)
 
+  infixl 2 _∙$_
   data Expr : Set → Set where
       Var     : {A : Set} →
-          V A → Expr A
+          Name → Expr A
+--          V A → Expr A
       Literal : {A : Set} →
           Lit A → Expr A
 --      Λ_ : {A B : Set} →

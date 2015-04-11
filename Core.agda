@@ -5,7 +5,6 @@ open import Data.Float
 open import Data.Char
 open import Data.Nat
 open import Data.Integer
-open import Data.Fin
 open import Data.Bool
 
 open import Data.Maybe
@@ -74,17 +73,14 @@ data CScalar : Set where
     CVoid   : CScalar
 
 data CType : Set where
-    CScalarTy     : CScalar → CType
-    _CVec⟦_⟧     : CScalar → Fin 4 → CType
-    _CMat⟦_⟧⟦_⟧   : CScalar → Fin 4 → Fin 4 → CType
-    _CArray⟦_⟧    : CType → {- CExpr -} ℕ → CType
-    CSampler     : Fin 3 → CType
+    CScalarTy    : CScalar → CType
+    _CVec⟦_⟧     : CScalar → ℕ → CType
+    _CMat⟦_⟧⟦_⟧  : CScalar → ℕ → ℕ → CType
+    _CArray⟦_⟧   : CType → {- CExpr -} ℕ → CType
+    CSampler     : ℕ → CType
     CSamplerCube : CType
 
     CProduct     : CType -> CType -> CType
-
-test : CType
-test = CFloat CMat⟦ fromℕ 3 ⟧⟦ fromℕ 3 ⟧
 
 LayoutQual : Set
 LayoutQual = String × Maybe ℕ
@@ -163,7 +159,7 @@ mutual
 data Profile : Set where
     Core          : Profile
     Compatibility : Profile
-    Es            :  Profile
+    Es            : Profile
 
 data CTopLevel : Set where
     DeclVar : FullVar → CTopLevel
