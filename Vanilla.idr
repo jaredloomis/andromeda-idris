@@ -1,5 +1,6 @@
 module Vanilla where
 
+open import Function
 open import Data.Product
 open import Data.String
 open import Data.Float
@@ -77,19 +78,31 @@ Context = List (Name × Type)
 -- Typing --
 ------------
 
-typeLit : Context → Literal → Type
-typeLit ctx (LitCode _ ty) = ty
-typeLit ctx (LitFlt _) = ScalarTy float
-typeLit ctx (LitInt _) = ScalarTy int
-typeLit ctx (LitUInt _) = ScalarTy uint
-typeLit ctx (LitBool _) = ScalarTy bool
-typeLit ctx (PreUnOp _ ty) = ty
-typeLit ctx (PostUnOp _ ty) = ty
-typeLit ctx (BinOp _ ty) = ty
-typeLit ctx (If x x₁ x₂) = {!   !}
+data TypeError : Set where
+    ErrMsg : String -> TypeError
+    IfTypeMismatch : Term -> Term -> TypeError
 
-typeWith : Context → Term → Type
-typeWith ctx (Var (name , ty)) = ty
-typeWith ctx (Lit x) = {!   !}
-typeWith ctx (App t t₁) = {!   !}
-typeWith ctx (Lam x t) = {!   !}
+TypeCheck : Set -> Set
+TypeCheck A = A ⊎ TypeError
+
+mutual
+  typeLit : Context → Literal → TypeCheck Type
+  typeLit ctx (LitCode _ ty) = inj₁ ty
+  typeLit ctx (LitFlt _) = inj₁ (ScalarTy float)
+  typeLit ctx (LitInt _) = inj₁ (ScalarTy int)
+  typeLit ctx (LitUInt _) = inj₁ (ScalarTy uint)
+  typeLit ctx (LitBool _) = inj₁ (ScalarTy bool)
+  typeLit ctx (PreUnOp _ ty) = inj₁ ty
+  typeLit ctx (PostUnOp _ ty) = inj₁ ty
+  typeLit ctx (BinOp _ ty) = inj₁ ty
+  typeLit ctx (If x t e) = {! !}
+{-
+      let tyT = typeWith ctx t
+      in if t == typeWith
+-}
+
+  typeWith : Context → Term → Type
+  typeWith ctx (Var (name , ty)) = ty
+  typeWith ctx (Lit x) = {!   !}
+  typeWith ctx (App t t₁) = {!   !}
+  typeWith ctx (Lam x t) = {!   !}
