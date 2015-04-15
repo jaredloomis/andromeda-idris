@@ -64,8 +64,8 @@ data CScalar : Type where
 
 data CType : Type where
     CScalarTy    : CScalar -> CType
-    CVec         : CScalar -> Fin 4 -> CType
-    CMat         : CScalar -> Fin 4 -> Fin 4 -> CType
+    CVec         : CScalar -> Fin 5 -> CType
+    CMat         : CScalar -> Fin 5 -> Fin 5 -> CType
     CArray       : CType -> {- CExpr -} Nat -> CType
     CSampler     : Fin 4 -> CType
     CSamplerCube : CType
@@ -105,8 +105,20 @@ data Qualifier : Type where
         Maybe InterpolationQualifier ->
         Qualifier
 
-noQualifier : Qualifier
-noQualifier = MkQualifier Nothing Nothing Nothing
+storageQ : StorageQualifier -> Qualifier
+storageQ q = MkQualifier Nothing (Just q) Nothing
+
+inQ : Qualifier
+inQ = storageQ In
+
+uniformQ : Qualifier
+uniformQ = storageQ Uniform
+
+outQ : Qualifier
+outQ = storageQ Out
+
+noQ : Qualifier
+noQ = MkQualifier Nothing Nothing Nothing
 
 FullType : Type
 FullType = (CType, Qualifier)

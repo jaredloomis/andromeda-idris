@@ -11,7 +11,7 @@ import Core
 -- Types --
 -----------
 
-Mat : Fin 4 -> Fin 4 -> Type -> Type
+Mat : Fin 5 -> Fin 5 -> Type -> Type
 Mat n m a = Vect (finToNat n) (Vect (finToNat m) a)
 
 data Sampler : Fin 4 -> Type where
@@ -38,11 +38,11 @@ data Ty : Type -> Type where
     samplerCube : Ty SamplerCube
 
     vec         :
-        Scalar a -> (n : Fin 4) -> Ty (Vect (finToNat n) a)
+        (n : Fin 5) -> Scalar a -> Ty (Vect (finToNat n) a)
     mat         :
-        Scalar a -> (n : Fin 4) -> (m : Fin 4) -> Ty (Mat n m a)
+        (n : Fin 5) -> (m : Fin 5) -> Scalar a  -> Ty (Mat n m a)
     array       :
-        Ty a -> Nat -> Ty (List a)
+        Nat -> Ty a -> Ty (List a)
 
     (&)         : Ty a -> Ty b -> Ty (a,   b)
     (~>)        : Ty a -> Ty b -> Ty (a -> b)
@@ -50,13 +50,14 @@ data Ty : Type -> Type where
     -- | Unneeded/Unused/Erased type
     Any : Ty a
 
+
+
 ----------
 -- Expr --
 ----------
 
 data V : Type -> Type where
     MkV : Ty a -> Name -> V a
-
 
 data Lit : Type -> Type where
     LitFlt   : Float -> Lit Float
@@ -74,15 +75,44 @@ data Lit : Type -> Type where
 
 infixl 2 :$
 data Expr : Type -> Type where
-    Var     : Name -> Expr a
---        V a -> Expr a
+    Ref     : Name -> Expr a
+--            V a  -> Expr a
     Literal : Lit a -> Expr a
 
-    LamLit  : (Expr a -> Expr b) -> Expr (a -> b)
---    LamLit  : {A, B : Type} -> (V A -> Expr B) -> Expr (A -> B)
-    Lam     : V a -> Expr b -> Expr (a -> b)
+    LamLit  : Qualifier -> Ty a -> (V a -> Expr b) -> Expr (a -> b)
+    Lam     : Qualifier -> V a -> Expr b -> Expr (a -> b)
       
     (:$)    : Expr (a -> b) -> Expr a -> Expr b
+
+Var : V a -> Expr a
+Var (MkV _ name) = Ref name
+
+syntax "/\\" {x} ":" [q] "," [ty] "=>" [y] =
+    LamLit q ty $ \x => y
+
+--------------------
+-- Expr Instances --
+--------------------
+
+instance Num (Expr Int) where
+    a + b = Literal (BinOp "+") :$ a :$ b
+    a - b = Literal (BinOp "-") :$ a :$ b
+    a * b = Literal (BinOp "*") :$ a :$ b
+    abs a = Literal (LitCode "abs") :$ a
+    fromInteger i = Literal (LitInt (fromInteger i))
+instance Num (Expr Nat) where
+    a + b = Literal (BinOp "+") :$ a :$ b
+    a - b = Literal (BinOp "-") :$ a :$ b
+    a * b = Literal (BinOp "*") :$ a :$ b
+    abs a = Literal (LitCode "abs") :$ a
+    fromInteger i = Literal (LitUInt (fromInteger i))
+instance Num (Expr Float) where
+    a + b = Literal (BinOp "+") :$ a :$ b
+    a - b = Literal (BinOp "-") :$ a :$ b
+    a * b = Literal (BinOp "*") :$ a :$ b
+    abs a = Literal (LitCode "abs") :$ a
+    fromInteger i = Literal (LitFlt (fromInteger i))
+
 
 ------------------------
 -- Operations on Expr --
@@ -91,29 +121,21 @@ data Expr : Type -> Type where
 typeOf : Expr a -> {auto ty : Ty a} -> Ty a
 typeOf _ {ty} = ty
 
-partial freeIn' : Name -> Expr a -> Bool
-freeIn' n (Var n')    = n == n'
-freeIn' n (Literal _) = False
-freeIn' n (LamLit _)  = False
-freeIn' n (Lam _ body) = freeIn' n body
-freeIn' n (f :$ x) = freeIn' n f || freeIn' n x
-
 freeIn : Name -> Expr a -> Bool
-freeIn n expr = assert_total (freeIn' n expr)
+freeIn n (Ref n')    = n == n'
+freeIn n (Literal _) = False
+freeIn n (LamLit _ _ _)  = False
+freeIn n (Lam _ _ body) = freeIn n body
+freeIn n (f :$ x) = freeIn n f || freeIn n x
 
-partial betaReduce' : Expr a -> Expr a 
-betaReduce' v@(Front.Var _)       = v
-betaReduce' l@(Literal _)   = l
-betaReduce' (Lam var body)  = Lam var (betaReduce' body)
-betaReduce' l@(LamLit _)    = l
-betaReduce' (LamLit f :$ x) = f x
-    {-
+betaReduce : Expr a -> Expr a 
+betaReduce v@(Ref _)       = v
+betaReduce l@(Literal _)   = l
+betaReduce (Lam q var body)  = Lam q var (betaReduce body)
+betaReduce l@(LamLit _ _ _)    = l
+betaReduce (LamLit q _ f :$ x) = --f x
     let name = "normVar_wakawakaa__"
         x'   = betaReduce x
         tyN  = typeOf x'
-    in Lam (MkV tyN name) (f $ MkV tyN name) :$ x'
-    -}
-betaReduce' (f :$ x) = betaReduce' f :$ betaReduce' x
-
-betaReduce : Expr a -> Expr a 
-betaReduce expr = assert_total (betaReduce' expr)
+    in Lam q (MkV tyN name) (f $ MkV tyN name) :$ x'
+betaReduce (f :$ x) = betaReduce f :$ betaReduce x
