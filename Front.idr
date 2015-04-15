@@ -8,6 +8,13 @@ import Core
 %default total
 
 -----------
+-- Utils --
+-----------
+
+exist : (Type -> Type) -> Type
+exist ty = Sigma Type (\a => ty a)
+
+-----------
 -- Types --
 -----------
 
@@ -30,7 +37,7 @@ data Scalar : Type -> Type where
 -- Type --
 ----------
 
-
+infixr 5 ~>
 data Ty : Type -> Type where
     scalar      : Scalar a -> Ty a
 
@@ -88,7 +95,7 @@ Var : V a -> Expr a
 Var (MkV _ name) = Ref name
 
 syntax "/\\" {x} ":" [q] "," [ty] "=>" [y] =
-    LamLit q ty $ \x => y
+    LamLit q ty $ \var => let x = Var var in y
 
 --------------------
 -- Expr Instances --
@@ -116,9 +123,6 @@ instance Num (Expr Float) where
 ------------------------
 -- Operations on Expr --
 ------------------------
-
-typeOf : Expr a -> {auto ty : Ty a} -> Ty a
-typeOf _ {ty} = ty
 
 freeIn : Name -> Expr a -> Bool
 freeIn n (Ref n')    = n == n'

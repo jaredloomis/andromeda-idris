@@ -34,18 +34,11 @@ instance VecConstruct (Vect n ty) ty (Vect (n+1) ty) where
     vec {n} v s =
         Literal (LitCode $ "vec" ++ show (n+1)) :$ v :$ s
 
-glPosition : Expr (Vect 3 Float ->
-                   Vect 3 Float ->
-                   Mat 4 4 Float ->
-                   Vect 4 Float)
-glPosition =
-    /\ vertPos_modelSpace : inQ      , vec 3 float   =>
-    /\ vertexColor        : inQ      , vec 3 float   =>
-    /\ mvp                : uniformQ , mat 4 4 float =>
-    Var mvp *# vec (Var vertPos_modelSpace) (Literal (LitFlt 1.0))
-
-glPosStr : String
-glPosStr = showFront glPosition
+glPosition : Expr (Vect 3 Float) ->
+             Expr (Mat 4 4 Float) ->
+             Expr (Vect 4 Float)
+glPosition vertPos_modelSpace mvp =
+    mvp *# vec vertPos_modelSpace (Literal (LitFlt 1))
 
 myMain : Expr (Vect 3 Float ->
                Vect 3 Float ->
@@ -55,7 +48,7 @@ myMain =
     /\ vertPos_modelSpace : inQ      , vec 3 float   =>
     /\ vertexColor        : inQ      , vec 3 float   =>
     /\ mvp                : uniformQ , mat 4 4 float =>
-    MkV (vec 4 float) "gl_Position" := (glPosition :$ Var vertPos_modelSpace :$ Var vertexColor :$ Var mvp)
+    MkV (vec 4 float) "gl_Position" := glPosition vertPos_modelSpace mvp
 
 mainStr : String
 mainStr = showFront myMain

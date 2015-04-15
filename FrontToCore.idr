@@ -61,6 +61,37 @@ normalize (f :$ x) = do
     return $ f' :$ x'
 normalize e = return e
 
+-- Type Checking --
+
+typeOfAuto : Expr a -> {auto ty : Ty a} -> Ty a
+typeOfAuto _ {ty} = ty
+
+Context : Type
+Context = List (Name, exist Ty)
+
+typeLit : Lit a -> Ty a
+typeLit (LitFlt _)  = scalar float
+typeLit (LitInt _)  = scalar int
+typeLit (LitUInt _) = scalar uint
+typeLit (LitBool _) = scalar bool
+typeLit l           = typeOfAuto (Literal l)
+
+typeWith : Context -> Expr a -> ElabM (Ty a)
+typeWith ctx e@(Ref name)     =
+    case lookup name ctx of
+        Nothing => return (believe_me $ typeOfAuto e)
+        Just ty => return (believe_me ty)
+typeWith ctx (Literal l)      = return $ typeLit l
+typeWith ctx e@(LamLit _ _ _) =
+    normalize e >>= typeWith ctx . assert_smaller e
+typeWith ctx (Lam _ (MkV ty name) body) = (ty ~>) `map`
+    typeWith ((name, (_ ** ty)) :: ctx) body
+typeWith ctx (f :$ _) = do
+    tyF <- typeWith ctx f
+    return $ case tyF of
+        _ ~> b => believe_me b
+        _      => believe_me tyF
+
 -- Elaboration --
 
 scalarToCore : Scalar a -> CScalar
@@ -84,7 +115,7 @@ typeToCore ((&) a b)  = CProduct (typeToCore a) (typeToCore b)
 typeToCore ((~>) a b) = typeToCore b
 typeToCore Any      = CScalarTy CVoid -- Doesn't matter
 
-declVars : Expr a -> ElabM (List CTopLevel, Sigma Type (\b => Expr b))
+declVars : Expr a -> ElabM (List CTopLevel, exist Expr)
 declVars (LamLit q ty f) = do
     name <- freshName
     let expr = f (MkV ty name)
@@ -100,16 +131,24 @@ declVars (Lam q (MkV ty var) body) = do
 declVars expr = return ([], (_ ** expr))
 
 declFun : Name -> Expr a -> ElabM (List CTopLevel)
-declFun nameStr expr = do
+declFun {a=fTy} nameStr expr = do
     expr' <- normalize expr
     let (params, (_ ** body)) = collectParams expr'
     (tops, body') <- genBody (assert_smaller expr body)
-    let decl = DeclFun (CScalarTy CVoid)
+    retTy <- coreTy body
+    let decl = DeclFun retTy
                        nameStr
                        params
-                       (Return (Just body'))
+                       (funStatement retTy body')
     return $ tops ++ [decl]
   where
+    funStatement : CType -> CExpr -> CStatement
+    funStatement (CScalarTy CVoid) expr = DoExpr expr
+    funStatement _                 expr = Return (Just expr)
+
+    coreTy : Expr a -> ElabM CType
+    coreTy e = typeToCore `map` typeWith [] e
+
     litToCore : Lit a -> CLiteral
     litToCore (LitFlt   f)       = CLitFlt   f
     litToCore (LitBool  b)       = CLitBool  b
@@ -122,7 +161,7 @@ declFun nameStr expr = do
     litToCore Pair               = CPair
 
     collectParams :
-        Expr a -> (List FullVar, Sigma Type (\b => Expr b))
+        Expr a -> (List FullVar, exist Expr)
     collectParams (LamLit q ty f) =
         let name = "tmp_andromeda_name"
             expr = f (MkV ty name)
