@@ -113,7 +113,6 @@ instance Num (Expr Float) where
     abs a = Literal (LitCode "abs") :$ a
     fromInteger i = Literal (LitFlt (fromInteger i))
 
-
 ------------------------
 -- Operations on Expr --
 ------------------------
@@ -127,15 +126,3 @@ freeIn n (Literal _) = False
 freeIn n (LamLit _ _ _)  = False
 freeIn n (Lam _ _ body) = freeIn n body
 freeIn n (f :$ x) = freeIn n f || freeIn n x
-
-betaReduce : Expr a -> Expr a 
-betaReduce v@(Ref _)       = v
-betaReduce l@(Literal _)   = l
-betaReduce (Lam q var body)  = Lam q var (betaReduce body)
-betaReduce l@(LamLit _ _ _)    = l
-betaReduce (LamLit q _ f :$ x) = --f x
-    let name = "normVar_wakawakaa__"
-        x'   = betaReduce x
-        tyN  = typeOf x'
-    in Lam q (MkV tyN name) (f $ MkV tyN name) :$ x'
-betaReduce (f :$ x) = betaReduce f :$ betaReduce x

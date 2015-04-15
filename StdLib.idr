@@ -12,6 +12,11 @@ infixl 9 *#
 (*#) : Expr a -> Expr b -> Expr c
 a *# b = Literal (BinOp "*") :$ a :$ b
 
+infixl 3 :=
+(:=) : V a -> Expr a -> Expr ()
+(:=) var val =
+    Literal (BinOp "=") :$ Var var :$ val
+
 -------------------
 -- Vec appending --
 -------------------
@@ -41,3 +46,16 @@ glPosition =
 
 glPosStr : String
 glPosStr = showFront glPosition
+
+myMain : Expr (Vect 3 Float ->
+               Vect 3 Float ->
+               Mat 4 4 Float ->
+               ())
+myMain =
+    /\ vertPos_modelSpace : inQ      , vec 3 float   =>
+    /\ vertexColor        : inQ      , vec 3 float   =>
+    /\ mvp                : uniformQ , mat 4 4 float =>
+    MkV (vec 4 float) "gl_Position" := (glPosition :$ Var vertPos_modelSpace :$ Var vertexColor :$ Var mvp)
+
+mainStr : String
+mainStr = showFront myMain

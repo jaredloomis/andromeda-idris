@@ -31,6 +31,36 @@ freshName = do
     modify $ \es => record {nameSeed = nameSeed es + 1} es
     return $ "andromeda_var_name" ++ show n
 
+-- Normalizing --
+
+subst : Name -> Expr b -> Expr a -> Expr a
+subst name s (Lam q var body) =
+    Lam q var (subst name s body)
+subst name s (f :$ x) =
+    subst name s f :$ subst name s x
+subst name s e@(Ref name') =
+    if name == name' then believe_me s else e
+subst _ _ e = e
+
+normalize : Expr a -> ElabM (Expr a)
+normalize e@(Lam q (MkV _ name) f :$ x) = do
+    f' <- normalize f
+    x' <- normalize x
+    normalize $ assert_smaller e (subst name x' f')
+normalize e@(LamLit q ty f) = do
+    name <- freshName
+    let expr = f $ MkV ty name
+    expr' <- normalize expr
+    normalize (assert_smaller e $ Lam q (MkV ty name) expr')
+normalize (Lam q var body) = do
+    body' <- normalize body
+    return $ Lam q var body'
+normalize (f :$ x) = do
+    f' <- normalize f
+    x' <- normalize x
+    return $ f' :$ x'
+normalize e = return e
+
 -- Elaboration --
 
 scalarToCore : Scalar a -> CScalar
@@ -69,15 +99,16 @@ declVars (Lam q (MkV ty var) body) = do
         rest, endBody)
 declVars expr = return ([], (_ ** expr))
 
-declFun : Name -> Expr a -> List CTopLevel
-declFun nameStr expr = assert_total $
-    let (params, (_ ** body)) = collectParams expr
-        (tops, expr) = assert_total (genBody body)
-        decl = DeclFun (CScalarTy CVoid)
+declFun : Name -> Expr a -> ElabM (List CTopLevel)
+declFun nameStr expr = do
+    expr' <- normalize expr
+    let (params, (_ ** body)) = collectParams expr'
+    (tops, body') <- genBody (assert_smaller expr body)
+    let decl = DeclFun (CScalarTy CVoid)
                        nameStr
                        params
-                       (Return (Just expr))
-    in tops ++ [decl]
+                       (Return (Just body'))
+    return $ tops ++ [decl]
   where
     litToCore : Lit a -> CLiteral
     litToCore (LitFlt   f)       = CLitFlt   f
@@ -104,23 +135,26 @@ declFun nameStr expr = assert_total $
         in (wholeList, endBody)
     collectParams {a} body = ([], (a ** body))
 
-    genBody : Expr a -> (List CTopLevel, CExpr)
-    genBody (Ref name)  = ([], CVar name)
-    genBody (Literal x) = ([], CLit (litToCore x))
-    genBody (LamLit _ _ _)  = ([], CVar "error: see FrontToCore.idr")
-    genBody (Lam q var body) =
+    genBody : Expr a -> ElabM (List CTopLevel, CExpr)
+    genBody (Ref name)  = return ([], CVar name)
+    genBody (Literal x) = return ([], CLit (litToCore x))
+    genBody (LamLit _ _ _) =
+        return ([], CVar "error: see FrontToCore.idr")
+    genBody (Lam q var body) = do
         let name' = nameStr ++ "_prime"
-            fun = declFun name' (Lam q var body)
-        in (fun, CVar name')
-    genBody (f :$ x) =
-        let (tf, f') = genBody f
-            (tx, x') = genBody x
-        in (tf ++ tx, CApp' f' x')
+        fun <- declFun name' (Lam q var body)
+        return (fun, CVar name')
+    genBody (f :$ x) = do
+        (tf, f') <- genBody f
+        (tx, x') <- genBody x
+        return (tf ++ tx, CApp' f' x')
 
 declMain : Expr a -> ElabM (List CTopLevel)
 declMain expr = do
-    (varDecls, (_ ** body)) <- declVars expr
-    return $ varDecls ++ declFun "main" body
+    expr' <- normalize expr
+    (varDecls, (_ ** body)) <- declVars expr'
+    mainDecls <- declFun "main" body
+    return $ varDecls ++ mainDecls
 
 showFront : Expr a -> String
 showFront expr =

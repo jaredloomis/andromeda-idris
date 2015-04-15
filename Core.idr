@@ -18,7 +18,6 @@ Code = String
 -- Core Expressions --
 ----------------------
 
---mutual
 data CLiteral : Type where
     CLitCode  : Code  -> CLiteral
 
@@ -32,14 +31,6 @@ data CLiteral : Type where
     CPostUnOp : Name -> CLiteral
 
     CPair     : CLiteral
-
-{-
-      CBinOp    : Name  → CExpr → CExpr → CLiteral
-      CPreUnOp  : Name  → CExpr →         CLiteral
-      CPostUnOp : Name  → CExpr →         CLiteral
-
-      CPair     : CExpr → CExpr → CLiteral
--}
 
 data CExpr : Type where
     CVar : Name                -> CExpr
@@ -66,7 +57,7 @@ data CType : Type where
     CScalarTy    : CScalar -> CType
     CVec         : CScalar -> Fin 5 -> CType
     CMat         : CScalar -> Fin 5 -> Fin 5 -> CType
-    CArray       : CType -> {- CExpr -} Nat -> CType
+    CArray       : CType -> Nat -> CType
     CSampler     : Fin 4 -> CType
     CSamplerCube : CType
 
