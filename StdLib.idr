@@ -12,34 +12,38 @@ import FrontToCore
 -- Heterogeneous multiplication --
 ----------------------------------
 
-class HeteroMult a b c | a, b where
+class HeteroMult (a : Ty) (b : Ty) (c : Ty) | a, b where
 
 -- vec * vec = vec
-instance HeteroMult (Vect n a) (Vect n a) (Vect n a) where
+instance HeteroMult (vec n a) (vec n a) (vec n a) where
 -- mat * mat = mat
-instance HeteroMult (Mat j n ty) (Mat n k ty) (Mat j k ty) where
+instance HeteroMult (mat j n ty) (mat n k ty) (mat j k ty) where
 -- mat * vec = vec
-instance HeteroMult (Mat n m a) (Vect n a) (Vect n a) where
-instance HeteroMult (Vect n a) (Mat n m a) (Vect n a) where
+{-
+instance HeteroMult (mat n m a) (vec n a) (vec n a) where
+instance HeteroMult (vec n a) (mat n m a) (vec n a) where
+-}
+instance HeteroMult (mat n m a) (vec j a) (vec j a) where
+instance HeteroMult (vec j a) (mat n m a) (vec j a) where
 -- vec * scalar = vec
-instance HeteroMult (Vect n a) a (Vect n a) where
-instance HeteroMult a (Vect n a) (Vect n a) where
+instance HeteroMult (vec n a) (scalar a) (vec n a) where
+instance HeteroMult (scalar a) (vec n a) (vec n a) where
 -- mat * scalar = mat
-instance HeteroMult a (Mat n m a) (Mat n m a) where
-instance HeteroMult (Mat n m a) a (Mat n m a) where
+instance HeteroMult (scalar a) (mat n m a) (mat n m a) where
+instance HeteroMult (mat n m a) (scalar a) (mat n m a) where
 -- float * integral = float
-instance HeteroMult Float Int Float where
-instance HeteroMult Int Float Float where
-instance HeteroMult Float Nat Float where
-instance HeteroMult Nat Float Float where
+instance HeteroMult (scalar float) (scalar int) (scalar float) where
+instance HeteroMult (scalar int) (scalar float) (scalar float) where
+instance HeteroMult (scalar float) (scalar uint) (scalar float) where
+instance HeteroMult (scalar uint) (scalar float) (scalar float) where
 -- scalar * scalar = scalar
-instance HeteroMult Float Float Float where
-instance HeteroMult Int Int Int where
-instance HeteroMult Nat Nat Nat where
+instance HeteroMult (scalar float) (scalar float) (scalar float) where
+instance HeteroMult (scalar int) (scalar int) (scalar int) where
+instance HeteroMult (scalar uint) (scalar uint) (scalar uint) where
 
 infixl 9 *#
 (*#) : HeteroMult a b c => Expr a -> Expr b -> Expr c
-(*#) x y = Literal (BinOp "*") :$ x :$ y
+(*#) x y = Literal (BinOp _ _ _ "*") :$ x :$ y
 
 ----------------
 -- Assignment --
@@ -53,18 +57,19 @@ infixr 2 :=
 -- Vec appending --
 -------------------
 
-class VecConstruct a b c | a, b where
-    vec : Expr a -> Expr b -> Expr c
+infixr 8 &#
+class VecConstruct (a : Ty) (b : Ty) (c : Ty) | a, b where
+    (&#) : Expr a -> Expr b -> Expr c
 
-instance VecConstruct (Vect n ty) (Vect m ty) (Vect (n+m) ty) where
-    vec {n} {m} a b =
-        Literal (LitCode $ "vec" ++ show (n+m)) :$ a :$ b
-instance VecConstruct ty (Vect n ty) (Vect (n+1) ty) where
-    vec {n} s v =
-        Literal (LitCode $ "vec" ++ show (n+1)) :$ s :$ v
-instance VecConstruct (Vect n ty) ty (Vect (n+1) ty) where
-    vec {n} v s =
-        Literal (LitCode $ "vec" ++ show (n+1)) :$ v :$ s
+instance VecConstruct (vec n ty) (vec m ty) (vec (n+m) ty) where
+    (&#) {n} {m} a b =
+        Literal (LitCode _ $ "vec" ++ show (n+m)) :$ a :$ b
+instance VecConstruct (scalar ty) (vec n ty) (vec (S n) ty) where
+    (&#) {n} s v =
+        Literal (LitCode _ $ "vec" ++ show (S n)) :$ s :$ v
+instance VecConstruct (vec n ty) (scalar ty) (vec (S n) ty) where
+    (&#) {n} v s =
+        Literal (LitCode _ $ "vec" ++ show (S n)) :$ v :$ s
 
 -------------------
 -- Vec swizzling --
@@ -89,17 +94,18 @@ showSwizzle W       = "w"
 showSwizzle (a & b) = showSwizzle a ++ showSwizzle b
 
 infixr 3 @
-(@) : Expr (Vect n a) -> Swizzle n t -> Expr (Vect t a)
+(@) : Expr (vec n a) -> Swizzle n t -> Expr (vec t a)
 (@) expr swiz =
-    Literal (PostUnOp $ "." ++ showSwizzle swiz) :$ expr
+    Literal (PostUnOp _ _ $ "." ++ showSwizzle swiz) :$ expr
 
 ------
 
-positionF : Vect 3 Float ~> Mat 4 4 Float ~|> Vect 4 Float
+positionF : Expr (vec 3 float) -> Expr (mat 4 4 float) ->
+            Expr (vec 4 float)
 positionF vertPos_modelSpace mvp =
-    mvp *# vec vertPos_modelSpace (Literal (LitFlt 1))
+    mvp *# vertPos_modelSpace &# Literal (LitFlt 1)
 
-positionExpr : Expr (Vect 3 Float -> Mat 4 4 Float -> Vect 4 Float)
+positionExpr : Expr (vec 3 float ~> mat 4 4 float ~> vec 4 float)
 positionExpr =
     /\ vertPos_modelSpace : inQ      , vec 3 float   =>
     /\ mvp                : uniformQ , mat 4 4 float =>

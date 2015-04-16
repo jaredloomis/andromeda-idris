@@ -55,13 +55,14 @@ data CScalar : Type where
 
 data CType : Type where
     CScalarTy    : CScalar -> CType
-    CVec         : CScalar -> Fin 5 -> CType
-    CMat         : CScalar -> Fin 5 -> Fin 5 -> CType
+    CVec         : CScalar -> Nat -> CType
+    CMat         : CScalar -> Nat -> Nat -> CType
     CArray       : CType -> Nat -> CType
     CSampler     : Fin 4 -> CType
     CSamplerCube : CType
 
-    CProduct     : CType -> CType -> CType
+    CArrow       : CType -> CType -> CType
+--    CProduct     : CType -> CType -> CType
 
 LayoutQual : Type
 LayoutQual = (String, Maybe Int)

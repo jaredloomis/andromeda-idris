@@ -11,8 +11,8 @@ import Core
 -- Utils --
 -----------
 
-exist : (Type -> Type) -> Type
-exist ty = Sigma Type (\a => ty a)
+exist : (p -> Type) -> Type
+exist {p} ty = Sigma p (\a => ty a)
 
 -----------
 -- Types --
@@ -25,70 +25,68 @@ data Sampler : Fin 4 -> Type where
 
 data SamplerCube : Type where
 
-data Scalar : Type -> Type where
-    void  : Scalar ()
+data Scalar = void | bool | int | uint | float
 
-    bool  : Scalar Bool
-    int   : Scalar Int
-    uint  : Scalar Nat
-    float : Scalar Float
+interpScalar : Scalar -> Type
+interpScalar void  = ()
+interpScalar bool  = Bool
+interpScalar int   = Int
+interpScalar uint  = Nat
+interpScalar float = Float
 
 ----------
 -- Type --
 ----------
 
-data Ty : Type -> Type where
-    scalar      : Scalar a -> Ty a
+infixr 3 ~>
+data Ty =
+    scalar Scalar
+  | sampler (Fin 4)
+  | samplerCube
+  | vec Nat Scalar
+  | mat Nat Nat Scalar
+  | array Nat Ty
+  | (~>) Ty Ty
 
-    sampler     : (n : Fin 4) -> Ty (Sampler n)
-    samplerCube : Ty SamplerCube
-
-    vec         :
-        (n : Fin 5) -> Scalar a ->
-            Ty (Vect (finToNat n) a)
-    mat         :
-        (n : Fin 5) -> (m : Fin 5) -> Scalar a  ->
-            Ty (Mat (finToNat n) (finToNat m) a)
-    array       :
-        Nat -> Ty a -> Ty (List a)
-
---    (&)         : Ty a -> Ty b -> Ty (a,   b)
-    arrow       : Ty a -> Ty b -> Ty (a -> b)
-
-    -- | Unneeded/Unused/Erased type
-    Any : Ty a
+interpTy : Ty -> Type
+interpTy (scalar s)  = interpScalar s
+interpTy (sampler n) = Sampler n
+interpTy samplerCube = SamplerCube
+interpTy (vec n s)   = Vect n (interpScalar s)
+interpTy (mat n m s) = Mat n m (interpScalar s)
+interpTy (array n t) = Vect n (interpTy t)
+interpTy (a ~> b)    = interpTy a -> interpTy b
 
 ----------
 -- Expr --
 ----------
 
-data V : Type -> Type where
-    MkV : Ty a -> Name -> V a
+data V : Ty -> Type where
+    MkV : (a : Ty) -> Name -> V a
 
-data Lit : Type -> Type where
-    LitFlt   : Float -> Lit Float
-    LitBool  : Bool  -> Lit Bool
-    LitInt   : Int   -> Lit Int
-    LitUInt  : Nat   -> Lit Nat
+data Lit : Ty -> Type where
+    LitFlt   : Float -> Lit (scalar float)
+    LitBool  : Bool  -> Lit (scalar bool)
+    LitInt   : Int   -> Lit (scalar int)
+    LitUInt  : Nat   -> Lit (scalar uint)
 
-    LitCode  : Code  -> Lit a
+    LitCode  : (a : Ty) -> Code -> Lit a
 
-    PreUnOp  : Name  -> Lit (a -> b)
-    PostUnOp : Name  -> Lit (a -> b)
-    BinOp    : Name  -> Lit (a -> b -> c)
-
-    Pair     : Lit (a -> b -> (a, b))
+    PreUnOp  : (a : Ty) -> (b : Ty) -> Name -> Lit (a ~> b)
+    PostUnOp : (a : Ty) -> (b : Ty) -> Name -> Lit (a ~> b)
+    BinOp    : (a : Ty) -> (b : Ty) -> (c : Ty) ->
+               Name -> Lit (a ~> b ~> c)
 
 infixl 2 :$
-data Expr : Type -> Type where
+data Expr : Ty -> Type where
     Ref     : Name -> Expr a
 --            V a  -> Expr a
     Literal : Lit a -> Expr a
 
-    LamLit  : Qualifier -> Ty a -> (V a -> Expr b) -> Expr (a -> b)
-    Lam     : Qualifier -> V a -> Expr b -> Expr (a -> b)
+    LamLit  : Qualifier -> (a : Ty) -> (V a -> Expr b) -> Expr (a ~> b)
+    Lam     : Qualifier -> V a -> Expr b -> Expr (a ~> b)
       
-    (:$)    : Expr (a -> b) -> Expr a -> Expr b
+    (:$)    : Expr (a ~> b) -> Expr a -> Expr b
 
 Var : V a -> Expr a
 Var (MkV _ name) = Ref name
@@ -96,73 +94,27 @@ Var (MkV _ name) = Ref name
 syntax "/\\" {x} ":" [q] "," [ty] "=>" [y] =
     LamLit q ty $ \var => let x = Var var in y
 
-infixr 3 ~>
-(~>) : Type -> Type -> Type
-(~>) a b = Expr a -> b
-
-infixr 3 ~|>
-(~|>) : Type -> Type -> Type
-(~|>) a b = Expr a -> Expr b
-
-infixr 3 ~~>
-(~~>) : List Type -> Type -> Type
-(~~>) (x::xs) ret = x ~> (xs ~~> ret)
-(~~>) []      ret = Expr ret
-
--------------------
--- Type Checking --
--------------------
-
-typeOfAuto : Expr a -> {auto ty : Ty a} -> Ty a
-typeOfAuto _ {ty} = ty
-
-Context : Type
-Context = List (Name, exist Ty)
-
-typeLit : Lit a -> Ty a
-typeLit (LitFlt _)  = scalar float
-typeLit (LitInt _)  = scalar int
-typeLit (LitUInt _) = scalar uint
-typeLit (LitBool _) = scalar bool
-typeLit l           = typeOfAuto (Literal l)
-
-typeWith : Context -> Expr a -> Ty a
-typeWith ctx e@(Ref name)     =
-    case lookup name ctx of
-        Nothing => believe_me $ typeOfAuto e
-        Just ty => believe_me   ty
-typeWith ctx (Literal l)      = typeLit l
-typeWith ctx e@(LamLit _ _ _) = typeOfAuto e
---    normalize e >>= typeWith ctx . assert_smaller e
-typeWith ctx (Lam _ (MkV ty name) body) = arrow ty $
-    typeWith ((name, (_ ** ty)) :: ctx) body
-typeWith ctx (f :$ _) =
-    let tyF = typeWith ctx f
-    in case tyF of
-        arrow _ b => believe_me b
-        _         => believe_me tyF
-
 --------------------
 -- Expr Instances --
 --------------------
 
-instance Num (Expr Int) where
-    a + b = Literal (BinOp "+") :$ a :$ b
-    a - b = Literal (BinOp "-") :$ a :$ b
-    a * b = Literal (BinOp "*") :$ a :$ b
-    abs a = Literal (LitCode "abs") :$ a
+instance Num (Expr (scalar int)) where
+    a + b = Literal (BinOp _ _ _ "+") :$ a :$ b
+    a - b = Literal (BinOp _ _ _ "-") :$ a :$ b
+    a * b = Literal (BinOp _ _ _ "*") :$ a :$ b
+    abs a = Literal (LitCode _ "abs") :$ a
     fromInteger i = Literal (LitInt (fromInteger i))
-instance Num (Expr Nat) where
-    a + b = Literal (BinOp "+") :$ a :$ b
-    a - b = Literal (BinOp "-") :$ a :$ b
-    a * b = Literal (BinOp "*") :$ a :$ b
-    abs a = Literal (LitCode "abs") :$ a
+instance Num (Expr (scalar uint)) where
+    a + b = Literal (BinOp _ _ _ "+") :$ a :$ b
+    a - b = Literal (BinOp _ _ _ "-") :$ a :$ b
+    a * b = Literal (BinOp _ _ _ "*") :$ a :$ b
+    abs a = Literal (LitCode _ "abs") :$ a
     fromInteger i = Literal (LitUInt (fromInteger i))
-instance Num (Expr Float) where
-    a + b = Literal (BinOp "+") :$ a :$ b
-    a - b = Literal (BinOp "-") :$ a :$ b
-    a * b = Literal (BinOp "*") :$ a :$ b
-    abs a = Literal (LitCode "abs") :$ a
+instance Num (Expr (scalar float)) where
+    a + b = Literal (BinOp _ _ _ "+") :$ a :$ b
+    a - b = Literal (BinOp _ _ _ "-") :$ a :$ b
+    a * b = Literal (BinOp _ _ _ "*") :$ a :$ b
+    abs a = Literal (LitCode _ "abs") :$ a
     fromInteger i = Literal (LitFlt (fromInteger i))
 
 ------------
@@ -172,14 +124,3 @@ instance Num (Expr Float) where
 infixr 2 :=
 data Assign : Type where
     (:=) : Expr a -> Expr a -> Assign
-
-------------------------
--- Operations on Expr --
-------------------------
-
-freeIn : Name -> Expr a -> Bool
-freeIn n (Ref n')    = n == n'
-freeIn n (Literal _) = False
-freeIn n (LamLit _ _ _)  = False
-freeIn n (Lam _ _ body) = freeIn n body
-freeIn n (f :$ x) = freeIn n f || freeIn n x

@@ -47,15 +47,17 @@ showType : CType -> String
 showType (CScalarTy sc) = showScalar sc
 showType (CVec ty n) =
     scalarPrefix ty ++
-    "vec" ++ show (finToNat n)
+    "vec" ++ show n
 showType (CMat ty n m) =
     scalarPrefix ty ++ "mat" ++
-    show (finToNat n) ++ "x" ++ show (finToNat m)
+    show n ++ "x" ++ show m
 showType (CArray ty n) =
     showType ty ++ "[" ++ show n ++ "]"
 showType (CSampler n) = "sampler" ++ show (finToNat n) ++ "D"
 showType CSamplerCube = "samplerCube"
-showType (CProduct tyA tyB) = "Pair" -- TODO
+showType (CArrow a b) =
+    "(" ++ showType a ++ " -> " ++ showType b ++ ")"
+--showType (CProduct tyA tyB) = "Pair" -- TODO
 
 ----------
 -- Expr --

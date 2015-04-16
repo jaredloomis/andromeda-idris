@@ -63,14 +63,14 @@ normalize e = return e
 
 -- Elaboration --
 
-scalarToCore : Scalar a -> CScalar
+scalarToCore : Scalar -> CScalar
 scalarToCore void  = CVoid
 scalarToCore bool  = CBool
 scalarToCore int   = CInt
 scalarToCore uint  = CUInt
 scalarToCore float = CFloat
 
-typeToCore : Ty a -> CType
+typeToCore : Ty -> CType
 typeToCore (scalar scTy) = CScalarTy (scalarToCore scTy)
 typeToCore (sampler n) = CSampler n
 typeToCore samplerCube = CSamplerCube
@@ -80,8 +80,7 @@ typeToCore (mat n m scTy) =
     CMat (scalarToCore scTy) n m
 typeToCore (array n ty) =
     CArray (typeToCore ty) n
---typeToCore ((&) a b)  = CProduct (typeToCore a) (typeToCore b)
-typeToCore (arrow a b) = typeToCore b
+typeToCore (a ~> b) = typeToCore b
 typeToCore Any      = CScalarTy CVoid -- Doesn't matter
 
 declVars : Expr a -> ElabM (List CTopLevel, exist Expr)
@@ -89,14 +88,10 @@ declVars (LamLit q ty f) = do
     name <- freshName
     let expr = f (MkV ty name)
     (rest, endBody) <- declVars expr
-    return (DeclVar
-        ((typeToCore ty, q), name) ::
-        rest, endBody)
+    return (DeclVar ((typeToCore ty, q), name) :: rest, endBody)
 declVars (Lam q (MkV ty var) body) = do
     (rest, endBody) <- declVars body
-    return (DeclVar
-        ((typeToCore ty, q), var) ::
-        rest, endBody)
+    return (DeclVar ((typeToCore ty, q), var) :: rest, endBody)
 declVars expr = return ([], (_ ** expr))
 
 litToCore : Lit a -> CLiteral
@@ -104,11 +99,10 @@ litToCore (LitFlt   f)       = CLitFlt   f
 litToCore (LitBool  b)       = CLitBool  b
 litToCore (LitInt   i)       = CLitInt   i
 litToCore (LitUInt  u)       = CLitUInt  u
-litToCore (LitCode  c)       = CLitCode  c
-litToCore (PreUnOp  o)       = CPreUnOp  o
-litToCore (PostUnOp o)       = CPostUnOp o
-litToCore (BinOp    o)       = CBinOp   o
-litToCore Pair               = CPair
+litToCore (LitCode  _ c)     = CLitCode  c
+litToCore (PreUnOp  _ _ o)   = CPreUnOp  o
+litToCore (PostUnOp _ _ o)   = CPostUnOp o
+litToCore (BinOp    _ _ _ o) = CBinOp   o
 
 exprToCore : Expr a -> ElabM (List CTopLevel, CExpr)
 exprToCore (Ref name)  = return ([], CVar name)
@@ -145,7 +139,7 @@ declFun {a=fTy} nameStr expr = do
     funStatement _                 expr = Return (Just expr)
 
     coreTy : Expr a -> ElabM CType
-    coreTy e = return . typeToCore $ typeWith [] e
+    coreTy {a} e = return $ typeToCore a
 
     collectParams :
         Expr a -> (List FullVar, exist Expr)
@@ -175,17 +169,14 @@ showFront expr =
     let core = runElabM (declMain expr) (ES 0)
     in concatMap showTopLevel core
 
-
-
-
 elabAssign : Assign -> ElabM (List CTopLevel, List CTopLevel, CStatement)
-elabAssign (Ref name := expr) = do
+elabAssign ((:=) {a = ty} (Ref name) expr) = do
     expr' <- normalize expr
     (varDecls, (_ ** val)) <- declVars expr'
 
     topDecls <- if not ("gl_" `isPrefixOf` name)
         then do
-            let cty = typeToCore $ typeWith [] expr
+            let cty = typeToCore ty
             return (the (List CTopLevel) [DeclVar ((cty, outQ), name)])
         else return []
     (tops, core) <- exprToCore val
@@ -212,3 +203,4 @@ showAssigns : List Assign -> String
 showAssigns xs =
     let core = runElabM (declAssigns xs "main") (ES 0)
     in concatMap showTopLevel core
+
