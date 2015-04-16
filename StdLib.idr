@@ -44,11 +44,11 @@ infixl 9 *#
 ----------------
 -- Assignment --
 ----------------
-
+{-
 infixr 2 :=
 (:=) : Expr a -> Expr a -> Expr ()
 (:=) var val = Literal (BinOp "=") :$ var :$ val
-
+-}
 -------------------
 -- Vec appending --
 -------------------
@@ -95,16 +95,22 @@ infixr 3 @
 
 ------
 
-glPosition : Vect 3 Float ~> Mat 4 4 Float ~|> Vect 4 Float
-glPosition vertPos_modelSpace mvp =
+positionF : Vect 3 Float ~> Mat 4 4 Float ~|> Vect 4 Float
+positionF vertPos_modelSpace mvp =
     mvp *# vec vertPos_modelSpace (Literal (LitFlt 1))
 
-myMain : Expr (Vect 3 Float -> Mat 4 4 Float -> ())
-myMain =
+positionExpr : Expr (Vect 3 Float -> Mat 4 4 Float -> Vect 4 Float)
+positionExpr =
     /\ vertPos_modelSpace : inQ      , vec 3 float   =>
     /\ mvp                : uniformQ , mat 4 4 float =>
-    Ref "gl_Position" :=
-        glPosition vertPos_modelSpace mvp @ X & Y & Z & W
+    positionF vertPos_modelSpace mvp @ X & Y & Z & W
 
-mainStr : String
-mainStr = showFront myMain
+posStr : String
+posStr = showFront positionExpr
+
+position' : List Assign
+position' = [Ref "gl_Position" := positionExpr,
+             Ref "position"    := positionExpr]
+
+posStr' : String
+posStr' = showAssigns position'

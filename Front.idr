@@ -109,6 +109,39 @@ infixr 3 ~~>
 (~~>) (x::xs) ret = x ~> (xs ~~> ret)
 (~~>) []      ret = Expr ret
 
+-------------------
+-- Type Checking --
+-------------------
+
+typeOfAuto : Expr a -> {auto ty : Ty a} -> Ty a
+typeOfAuto _ {ty} = ty
+
+Context : Type
+Context = List (Name, exist Ty)
+
+typeLit : Lit a -> Ty a
+typeLit (LitFlt _)  = scalar float
+typeLit (LitInt _)  = scalar int
+typeLit (LitUInt _) = scalar uint
+typeLit (LitBool _) = scalar bool
+typeLit l           = typeOfAuto (Literal l)
+
+typeWith : Context -> Expr a -> Ty a
+typeWith ctx e@(Ref name)     =
+    case lookup name ctx of
+        Nothing => believe_me $ typeOfAuto e
+        Just ty => believe_me   ty
+typeWith ctx (Literal l)      = typeLit l
+typeWith ctx e@(LamLit _ _ _) = typeOfAuto e
+--    normalize e >>= typeWith ctx . assert_smaller e
+typeWith ctx (Lam _ (MkV ty name) body) = arrow ty $
+    typeWith ((name, (_ ** ty)) :: ctx) body
+typeWith ctx (f :$ _) =
+    let tyF = typeWith ctx f
+    in case tyF of
+        arrow _ b => believe_me b
+        _         => believe_me tyF
+
 --------------------
 -- Expr Instances --
 --------------------
@@ -131,6 +164,14 @@ instance Num (Expr Float) where
     a * b = Literal (BinOp "*") :$ a :$ b
     abs a = Literal (LitCode "abs") :$ a
     fromInteger i = Literal (LitFlt (fromInteger i))
+
+------------
+-- Assign --
+------------
+
+infixr 2 :=
+data Assign : Type where
+    (:=) : Expr a -> Expr a -> Assign
 
 ------------------------
 -- Operations on Expr --

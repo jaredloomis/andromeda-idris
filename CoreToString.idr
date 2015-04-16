@@ -143,6 +143,7 @@ showStatement (DoExpr expr)      = showExpr expr ++ ";\n"
 showStatement e@(SequenceStmt a b) =
     showStatement (assert_smaller e a) ++
     showStatement (assert_smaller e b)
+showStatement EmptyStmt = ""
 showStatement (DefineStmt (CDefine ty name expr)) =
     showType ty <++> name <++> "=" <++>
     showExpr expr ++ ";\n"

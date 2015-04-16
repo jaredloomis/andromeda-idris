@@ -132,6 +132,7 @@ mutual
     data CStatement : Type where
         DoExpr       : CExpr -> CStatement
         SequenceStmt : CStatement -> CStatement -> CStatement
+        EmptyStmt    : CStatement
 
         DefineStmt : CDefinition -> CStatement
         Assign     : Name -> CExpr -> CStatement
