@@ -84,13 +84,13 @@ typeWith ctx e@(Ref name)     =
 typeWith ctx (Literal l)      = return $ typeLit l
 typeWith ctx e@(LamLit _ _ _) =
     normalize e >>= typeWith ctx . assert_smaller e
-typeWith ctx (Lam _ (MkV ty name) body) = (ty ~>) `map`
+typeWith ctx (Lam _ (MkV ty name) body) = (arrow ty) `map`
     typeWith ((name, (_ ** ty)) :: ctx) body
 typeWith ctx (f :$ _) = do
     tyF <- typeWith ctx f
     return $ case tyF of
-        _ ~> b => believe_me b
-        _      => believe_me tyF
+        arrow _ b => believe_me b
+        _         => believe_me tyF
 
 -- Elaboration --
 
@@ -111,8 +111,8 @@ typeToCore (mat n m scTy) =
     CMat (scalarToCore scTy) n m
 typeToCore (array n ty) =
     CArray (typeToCore ty) n
-typeToCore ((&) a b)  = CProduct (typeToCore a) (typeToCore b)
-typeToCore ((~>) a b) = typeToCore b
+--typeToCore ((&) a b)  = CProduct (typeToCore a) (typeToCore b)
+typeToCore (arrow a b) = typeToCore b
 typeToCore Any      = CScalarTy CVoid -- Doesn't matter
 
 declVars : Expr a -> ElabM (List CTopLevel, exist Expr)

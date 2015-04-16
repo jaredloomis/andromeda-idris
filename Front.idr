@@ -18,8 +18,8 @@ exist ty = Sigma Type (\a => ty a)
 -- Types --
 -----------
 
-Mat : Fin 5 -> Fin 5 -> Type -> Type
-Mat n m a = Vect (finToNat n) (Vect (finToNat m) a)
+Mat : Nat -> Nat -> Type -> Type
+Mat n m a = Vect n (Vect m a)
 
 data Sampler : Fin 4 -> Type where
 
@@ -37,7 +37,6 @@ data Scalar : Type -> Type where
 -- Type --
 ----------
 
-infixr 5 ~>
 data Ty : Type -> Type where
     scalar      : Scalar a -> Ty a
 
@@ -45,19 +44,19 @@ data Ty : Type -> Type where
     samplerCube : Ty SamplerCube
 
     vec         :
-        (n : Fin 5) -> Scalar a -> Ty (Vect (finToNat n) a)
+        (n : Fin 5) -> Scalar a ->
+            Ty (Vect (finToNat n) a)
     mat         :
-        (n : Fin 5) -> (m : Fin 5) -> Scalar a  -> Ty (Mat n m a)
+        (n : Fin 5) -> (m : Fin 5) -> Scalar a  ->
+            Ty (Mat (finToNat n) (finToNat m) a)
     array       :
         Nat -> Ty a -> Ty (List a)
 
-    (&)         : Ty a -> Ty b -> Ty (a,   b)
-    (~>)        : Ty a -> Ty b -> Ty (a -> b)
+--    (&)         : Ty a -> Ty b -> Ty (a,   b)
+    arrow       : Ty a -> Ty b -> Ty (a -> b)
 
     -- | Unneeded/Unused/Erased type
     Any : Ty a
-
-
 
 ----------
 -- Expr --
@@ -96,6 +95,19 @@ Var (MkV _ name) = Ref name
 
 syntax "/\\" {x} ":" [q] "," [ty] "=>" [y] =
     LamLit q ty $ \var => let x = Var var in y
+
+infixr 3 ~>
+(~>) : Type -> Type -> Type
+(~>) a b = Expr a -> b
+
+infixr 3 ~|>
+(~|>) : Type -> Type -> Type
+(~|>) a b = Expr a -> Expr b
+
+infixr 3 ~~>
+(~~>) : List Type -> Type -> Type
+(~~>) (x::xs) ret = x ~> (xs ~~> ret)
+(~~>) []      ret = Expr ret
 
 --------------------
 -- Expr Instances --
